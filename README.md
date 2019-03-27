@@ -22,29 +22,33 @@ making ready for anonymous import.
 `py aida-pat-anonexcel.py anonymization-sheet.xlsx`
 
 Make a copy of anonymization-sheet.xlsx and fill it out. Follow instructions in sheet.
-Person should be whatever helps you remember who is who, and allows you to store their
-images separately in subdirectories with corresponding names.
-Running the above command puts anonymous images for export in subdirectory `anon/`
-and produces a report in `anonymization-sheet_anon.xlsx` for inspection, adding red
-highlights to cells that must be deleted to complete anonymization.
+Person should be the name of (possibly uncompressed) case export zipfiles with
+BLOCK_STAIN subdirectories. Running the above command puts anonymized images for
+export in subdirectory `anonymization-sheet_anon/` and updates
+`anonymization-sheet_anon.xlsx` to match, with block and stain information on new
+rows for each anonymized slide, and with study parameters carried over for each
+case and adding red highlight to cells that need be deleted to complete anonymization.
 
 ### Example
 
-anonymization-sheet.xlsx:
+anonymization-sheet.xlsx (before):
 
-| Person | AnonID | Block | Stain | Image file | AnonFile | Study parameter 1 | 2 | … |
-| --- | --- |   --- | --- |  --- | --- |  --- | --- |  --- |
-|P12312124124| | A | HE | orig.svs |  | X | 1 | high |
-|            | | B | HE | orig.svs |  | Y | 5 | low |
+| Status | Person | OrigFile | AnonID | Block | Stain | Study parameter 1 | 2 | … |
+| --- | --- | --- | --- | --- | --- |  --- | --- | --- |
+| |P123123123| | P-004 |  |  | X | 1 | high |
+| |P456456456| | |  |  | Y | 5 | low |
 
+anonymization-sheet.xlsx (after):
 
-anonymization-sheet_anon.xlsx:
-
-| Person | AnonID | Block | Stain | Image file | AnonFile | Study parameter 1 | 2 | … |
-| --- | --- |   --- | --- |  --- | --- |  --- | --- |  --- |
-|P12312124124| MYPROJ-001 | A | HE | orig.svs | MYPROJ-001;A;HE_anon.svs | X | 1 | high |
-|            | MYPROJ-001 | B | HE | orig.svs | MYPROJ-001;B;HE_anon.svs | Y | 5 | low |
-
+| Status | Person | OrigFile | AnonID | Block | Stain | Study parameter 1 | 2 | … |
+| --- | --- | --- | --- |  --- | --- | --- | --- | --- |
+| Done | P123123123 | P-004 | A | HE | orig.svs | P-004;P-004;A;HE_anon.svs | X | 1 | high |
+| Done | P123123123 | P-004 | B | HE | orig.svs | P-004;P-004;B;HE_anon.svs | X | 1 | high |
+| Done | P123123123 | P-004 | C | HE | orig.svs | P-004;P-004;C;HE_anon.svs | X | 1 | high |
+| Done | P123123123 | P-004 | D | HE | orig.svs | P-004;P-004;D;HE_anon.svs | X | 1 | high |
+| Done | P456456456 | P-005 |  | HE | orig.svs | P-005;P-005;;HE_anon.svs | Y | 5 | low |
+| Done | P456456456 | P-005 |  | HE2 | orig.svs | P-005;P-005;;HE2_anon.svs | Y | 5 | low |
+| Done | P456456456 | P-005 |  | HE3 | orig.svs | P-005;P-005;;HE3_anon.svs | Y | 5 | low |
 
 ### Setup to run with single click
 You can set up a shortcut to run aida-pat-anonexcel.py on a specific AIDA anonymization

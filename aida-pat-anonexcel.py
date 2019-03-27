@@ -16,6 +16,7 @@ import os
 import shutil
 import subprocess
 import sys
+import zipfile
 
 import openpyxl
 
@@ -24,12 +25,15 @@ options = {
         action='version',
         version='%(prog)s ' + __version__),
     'excelfile': dict(
-        type=argparse.FileType('rb'),
+        type=argparse.FileType('rb+'),
         metavar="EXCELFILE.xslx",
-        help="An AIDA Pathology Anonymization Excel Sheet. Report will be saved to EXCELFILE_anon.xslx."),
+        help="An AIDA Pathology Anonymization Excel Sheet. Will be updated in place"),
+    '--tmpdir': dict(
+        metavar="DIR",
+        help="Where to keep temporary files. Default: EXCELFILE_tmp."),
     '--anondir': dict(
         metavar="DIR",
-        help="Where to save anonymized images. Default: anon/ folder in same folder as EXCELFILE."),
+        help="Where to save anonymized slides. Default: EXCELFILE_tmp."),
     ('--suppress-exitcode','-z'): dict(
         action='store_true',
         help="Do not use an exitcode when exiting. Only useful with py -i."),
@@ -44,15 +48,15 @@ def get_options(argv):
     return parser.parse_args(argv[1:])
 
 tests = dict(
-    B1="AIDA Pathology Anonymization Sheet",
-    B9="Prefix:",
-    B10="Digits:",
-    A14="Person",
-    B14="AnonID",
-    C14="Block",
-    D14="Stain",
-    E14="Image file",
-    F14="AnonFile",
+    D1="AIDA Pathology Anonymization Sheet",
+    D9="Prefix:",
+    D10="Digits:",
+    A14="Status",
+    B14="Person",
+    C14="OrigFile",
+    D14="AnonID",
+    E14="Block",
+    F14="Stain",
 )
 def check_worksheet(ws):
     for cell, value in tests.items():
@@ -101,100 +105,152 @@ def verify_id_mapping(row, personid, anonid, personids, anonids):
         err(row, "Person {} is given AnonID {} on this row, but this Person was previously given AnonID {}.",
             personid, anonid, existing_anonid)
 
-def get_image_file(row, image_file_name, basedir, personid):
-    image_file_name_root, ext = os.path.splitext(image_file_name)
-    if ext:
-        if ext != ".svs":
-            err(row, "Unsupported file name on line {}. Only .svs files are supported.",
-                rowindex)
-        image_file = image_file_name
-    else:
-        image_file = image_file_name_root + '.svs'
-    sourcedir = basedir
-    if not os.path.isfile(os.path.join(sourcedir, image_file)):
-        sourcedir = os.path.join(basedir, str(personid))
-        image_file = os.path.join(sourcedir, image_file)
-        if not os.path.isfile(image_file):
-            err(row, "Image file {!r} not found, neither in base directory or Person subdirectory {}/",
-                image_file_name, personid)
-    return image_file
+def make_barcode(anonid, block, stain):
+    return "{0};{0};{1};{2}".format(anonid, block, stain)
 
-def process_image_file(row, image_file_name, anonfile, basedir, anondir, personid, barcode):
-    image_file = get_image_file(row, image_file_name, basedir, personid)
-    anonymize_cmd = ["anonymize_wsi.exe", "-bv", barcode, image_file]
+def files(directory, ext=None):
+    if ext:
+        return [f for f in next(os.walk(directory))[2] if f.endswith('.svs')]
+    return next(os.walk(directory))[2]
+
+def subdirs(directory):
+    return next(os.walk(directory))[1]
+
+def get_slides(i, persondir):
+    slides = []
+    for slidedir in subdirs(persondir):
+        if '_' not in slidedir:
+            err(i, "Slide directory {!r} for Person {!r} is not named on the format BLOCK_STAIN (eg 'A_HE').",
+                slidedir, os.path.basename(persondir))
+        block, stain = slidedir.split('_')
+        svsfiles = files(os.path.join(persondir, slidedir), '.svs')
+        if len(svsfiles) != 1:
+            err(i, "Expected 1 .svs file in slide directory {!r} for Person {!r} but found {}.",
+                slidedir, os.path.basename(persondir), len(svsfiles))
+        origfile = os.path.join(persondir, slidedir, svsfiles[0])
+        slides.append((block, stain, origfile))
+    return slides
+
+def anonymize_slide(i, processed_rows, anonid, block, stain, origfile, anondir):
+    barcode = make_barcode(anonid, block, stain)
+    if barcode in processed_rows:
+        err(i, "Duplicate found: Row {} and {} both give slides with AnonID:{!r}, Block:{!r}, Stain:{!r}. Please update and rerun.",
+            processed_rows[barcode], i, anonid, block, stain)
+    anonfile = barcode + '_anon.svs'
+    dst = os.path.join(anondir, anonfile)
+    if os.path.exists(dst):
+        os.remove(dst)
+    anonymize_cmd = ["anonymize_wsi.exe", "-bv", barcode, origfile]
     try:
         subprocess.run(anonymize_cmd, check=True)
     except:
-        err(row, "anonymize_wsi.exe returned a nonzero exit code for command {}. Aborting.",
+        err(i, "anonymize_wsi.exe returned a nonzero exit code for command {}. Aborting.",
             " ".join(repr(arg) for arg in anonymize_cmd))
-    src = os.path.join(os.path.dirname(image_file), anonfile)
-    os.rename(src, os.path.join(anondir, anonfile))
+    src = os.path.join(os.path.dirname(origfile), anonfile)
+    os.rename(src, dst)
 
-def get_str(cell):
-    return str((cell.value or '')).strip()
+def update_spreadsheet(i, ws, anonid, slides, processed_rows):
+    ws.insert_rows(i+1, len(slides) - 1)
+    for slideindex, (block, stain, origfile) in enumerate(slides):
+        barcode = make_barcode(anonid, block, stain)
+        processed_rows[barcode] = i + slideindex
+        ws.cell(i + slideindex, 1, 'Done')
+        ws.cell(i + slideindex, 3, origfile)
+        ws.cell(i + slideindex, 4, anonid)
+        ws.cell(i + slideindex, 5, block)
+        ws.cell(i + slideindex, 6, stain)
+        if slideindex > 0:
+            for c in range(7, ws.max_column):
+                ws.cell(i + slideindex, c, ws.cell(i, c).value)
+        mark_red(ws.cell(i + slideindex, 2))
+        mark_red(ws.cell(i + slideindex, 3))
+
+def get_str(worksheet, row, column):
+    return str(worksheet.cell(row, column).value or '').strip()
 
 def mark_red(cell):
     cell.fill = openpyxl.styles.PatternFill(start_color="FFC7CE", fill_type = "solid")
     cell.font = openpyxl.styles.Font(color="FF0000")
 
-def anonymize(wb, basedir, anondir, anonexcelfile):
+def anonymize(wb, basedir, tmpdir, anondir, excelfile):
     ws = wb.active
     check_worksheet(ws)
-    prefix = ws["C9"].value.strip()
-    digits = ws["C10"].value
-    rows = iter(ws.rows)
-    rowoffset = 0
-    processed_rows = dict() # Barcode => Row
-    anonids = dict() # ID -> anonid
-    personids = dict() # anonid -> ID
+    prefix = get_str(ws, 9, 5)
+    digits = ws["E10"].value
+    processed_rows = {} # barcode -> rownumber
+    anonids = dict() # personid -> anonid
+    personids = dict() # anonid -> personid
 
     # Skip headers
-    for row in rows:
-        rowoffset += 1
-        if row[0].value == "Person":
-            break
-
+    i = 15
     anonid_number = 0
-    personid = None
-    for i, current_row in enumerate(rows):
-        row = rowoffset + i + 1
-        # ID  AnonID	Block	Stain	Image file	AnonFile
-        personid = get_str(current_row[0]) or personid
-        anonid, block, stain, image_file_name, given_anonfile = (get_str(c) for c in current_row[1:6])
+    person = None
+    while i <= ws.max_row:
+        # Status	ZipFile	AnonFile	AnonID	Block	Stain
+        status = get_str(ws, i, 1)
+        person = get_str(ws, i, 2) or person
+        origfile = get_str(ws, i, 3)
+        anonid = get_str(ws, i, 4)
+        block = get_str(ws, i, 5)
+        stain = get_str(ws, i, 6)
 
+        if not person:
+            err(i, "No Person specified.")
+
+        # ID mapping
+        personid = person
+        is_zip = personid.endswith('.zip')
+        if is_zip:
+            personid = personid[:-4]
         if anonid:
-            anonid_number = get_anonid_number(row, anonid, prefix, digits, anonid_number)
+            anonid_number = get_anonid_number(i, anonid, prefix, digits, anonid_number)
         else:
             anonid, anonid_number = make_anonid(personid, anonids, prefix, digits, anonid_number)
+        verify_id_mapping(i, personid, anonid, personids, anonids)
 
-        if personid:
-            verify_id_mapping(row, personid, anonid, personids, anonids)
+        if status:
+            if status.lower() == 'done':
+                barcode = make_barcode(anonid, block, stain)
+                if barcode in processed_rows:
+                    err(i, "Duplicate found: Row {} and {} both give slides with AnonID:{!r}, Block:{!r}, Stain:{!r}. Please update and rerun.",
+                        processed_rows[barcode], i, anonid, block, stain)
+                processed_rows[barcode] = i
+            elif status.lower() != "ignore":
+                err(i, "Unknown status {!r}.", status)
+            mark_red(ws.cell(i, 2))
+            mark_red(ws.cell(i, 3))
+            wb.save(excelfile)
+            i += 1
+            continue
 
-        barcode = "{0};{0};{1};{2}".format(anonid, block or '', stain or '')
-        if barcode in processed_rows:
-            err(row, "Duplicate found: Row {} and {} both have AnonID:{!r}, Block:{!r}, Stain:{!r}. Please update and rerun.",
-                processed_rows[barcode], row, anonid, block, stain)
+        personfile = os.path.join(basedir, person)
+        if not os.path.exists(personfile):
+            err(i, "Person {!r} does not exist in work directory {}.", person, basedir)
 
-        anonfile = barcode + '_anon.svs'
-        if given_anonfile and given_anonfile != anonfile:
-            err(row, "AnonFile is {!r} but should be {!r}.", given_anonfile, anonfile)
+        persondir = personfile
+        if is_zip:
+            persondir = os.path.join(tmpdir, personid)
+            print("Decompressing {}...".format(person))
+            zipfile.ZipFile(personfile).extractall(tmpdir)
 
-        anonpath = os.path.join(anondir, anonfile)
-        if not (os.path.isfile(anonpath) and os.path.getsize(anonpath)):
-            process_image_file(row, image_file_name, anonfile, basedir, anondir, personid, barcode)
+        slides = get_slides(i, persondir)
+        if not slides:
+            err(i, "No slides present for Person {!r}.", person)
+        for block, stain, origfile in slides:
+            anonymize_slide(i, processed_rows, anonid, block, stain, origfile, anondir)
 
-        current_row[1].value = anonid
-        current_row[5].value = anonfile
-        mark_red(current_row[0])
-        mark_red(current_row[4])
-        wb.save(anonexcelfile)
-        processed_rows[barcode] = row
+        update_spreadsheet(i, ws, anonid, slides, processed_rows)
+        wb.save(excelfile)
+        i += len(slides)
+
+        if is_zip:
+            shutil.rmtree(persondir)
+
     return set(processed_rows.keys())
 
 def get_garbage(anondir, barcodes):
     garbage = []
-    # (dirpath, dirnames, filenames)
-    for filename in next(os.walk(anondir))[2]:
+    for filename in files(anondir):
         barcode = filename[:-len("_anon.svs")]
         if barcode not in barcodes:
             garbage.append(filename)
@@ -202,35 +258,38 @@ def get_garbage(anondir, barcodes):
 
 def main(argv):
     options = get_options(argv)
-    basedir = os.path.dirname(options.excelfile.name)
-    anondir = os.path.join(basedir, 'anon')
-    if not os.path.isdir(anondir):
-        os.makedirs(anondir, 0o755)
     wb = openpyxl.load_workbook(options.excelfile)
     base, ext = os.path.splitext(options.excelfile.name)
     anonexcelfile = base + '_anon' + ext
+    basedir = os.path.dirname(options.excelfile.name)
+    if not options.tmpdir:
+        options.tmpdir = os.path.join(basedir, base + '_tmp')
+    if not os.path.isdir(options.tmpdir):
+        os.makedirs(options.tmpdir, 0o755)
+    if not options.anondir:
+        options.anondir = os.path.join(basedir, base + '_anon')
+    if not os.path.isdir(options.anondir):
+        os.makedirs(options.anondir, 0o755)
     try:
-        barcodes = anonymize(wb, basedir, anondir, anonexcelfile)
+        barcodes = anonymize(wb, basedir, options.tmpdir, options.anondir, options.excelfile.name)
     except ParseError as err:
         print("Error on row {}: {}".format(*err.args), file=sys.stderr)
         if options.suppress_exitcode:
             return None
         return 1
-    garbage = get_garbage(anondir, barcodes)
+    garbage = get_garbage(options.anondir, barcodes)
     if garbage:
-        print("\nWarning: Possible garbage files found in anon/ folder. You may want to delete these before proceding:", file=sys.stderr)
+        print("\nWarning: Possible garbage files found in {!r} folder. You may want to delete these before proceding:".format(options.anondir), file=sys.stderr)
         print("\n".join(repr(s) for s in garbage), file=sys.stderr)
-    print("\nDone! {} anonymized images available in anon/, report in {!r}.".format(
-            len(barcodes), os.path.basename(anonexcelfile)))
+    print("\nDone! {} anonymized images available in {!r}, {!r} has been updated.".format(
+            len(barcodes), os.path.basename(options.anondir), os.path.basename(options.excelfile.name)))
     print("\nYour data is now Pseudonymous.\n")
     print("To make your data Anonymous: Delete all keys associating AnonIDs to "
-          "Persons, including the Person and Image file cells in {0!r} and any "
-          "intermediary data like AnonIDs in {1!r}. Obviously, none of the "
-          "study parameters in {0!r} may contain identifiers either.".format(
-            os.path.basename(anonexcelfile),
-            os.path.basename(options.excelfile.name)))
+          "Persons, including the Person and OrigFile file cells in {0!r}. "
+          "Obviously, none of the study parameters in {0!r} may contain "
+          "identifiers either.".format(os.path.basename(options.excelfile.name)))
 
 if __name__ == "__main__":
     exitcode = main(sys.argv)
     if exitcode is not None:
-        sys.exit(exitcode or 0)
+        sys.exit(exitcode)
