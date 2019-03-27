@@ -53,9 +53,8 @@ methods will open a terminal window for status and error messages, which you can
 when you have finished reading.
 
 1. Install dependencies (Python3 and openpyxl).
-2. Put aida-pat-anonexcel.py somewhere permanent where you can find it. Name it myproj.xlsx or similar.
-3. Put your copy of the anonymization sheet in a folder where you want to work. Put images in (subfolders to)
-this folder.
+2. Put aida-pat-anonexcel.py somewhere permanent where you can find it. 
+3. Put your copy of the anonymization sheet in a folder where you want to work. Name it myproj.xlsx or similar. Put images in (subfolders to) this folder.
 4. Make a shortcut some place convenient, eg in your work folder or elsewhere.
 
 Make a shortcut:
