@@ -207,7 +207,7 @@ def anonymize(wb, basedir, tmpdir, anondir, excelfile):
             if personid in personid_rows:
                 err(i, "Person {!r} was processed once already on line {}. "
                     "All records for one person must be processed consecutively "
-                    "in order to reduce risk including manual errors in the "
+                    "in order to reduce risk of including manual errors in the "
                     "results.",
                     personid, personid_rows[personid])
             previous_personid = personid
