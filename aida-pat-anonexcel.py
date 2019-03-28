@@ -177,7 +177,8 @@ def anonymize(wb, basedir, tmpdir, anondir, excelfile):
     check_worksheet(ws)
     prefix = get_str(ws, 9, 5)
     digits = ws["E10"].value
-    processed_rows = {} # barcode -> rownumber
+    person_rows = dict() # personid -> rownumber
+    processed_rows = dict() # barcode -> rownumber
     anonids = dict() # personid -> anonid
     personids = dict() # anonid -> personid
 
@@ -197,11 +198,19 @@ def anonymize(wb, basedir, tmpdir, anondir, excelfile):
         if not person:
             err(i, "No Person specified.")
 
-        # ID mapping
+        # Validate IDs, mappings etc.
         personid = person
         is_zip = personid.endswith('.zip')
         if is_zip:
             personid = personid[:-4]
+        if personid != previous_personid:
+            if personid in personid_rows:
+                err(i, "Person {!r} was processed once already on line {}. "
+                    "All records for one person must be processed consecutively "
+                    "in order to reduce risk including manual errors in the "
+                    "results.",
+                    personid, personid_rows[personid])
+            previous_personid = personid
         if anonid:
             anonid_number = get_anonid_number(i, anonid, prefix, digits, anonid_number)
         else:

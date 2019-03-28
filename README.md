@@ -1,16 +1,17 @@
 # AIDA Pathology Anonymizer for Excel Sheets
-Save anonymized copies of Whole Slide Imaging (WSI) pathology data for research
-for easy import into a Picture Archice and Communication System (PACS). Generates
-anonymous barcodes including information on request, block and stain.
+A tool for pathology researchers to help reduce repetitive and error-prone
+manual work in anonymizing data exports in Whole Slide Imaging (WSI).
+This tool lets researchers anonymize their data more easily by saving their data
+exports case by case in a folder, and noting them down along with associated
+study parameters in an Excel spreadsheet.
 
-**Research software not approved for clinical use.**
+From there, this tool can anonymize the slides
+[with a single click](#setup-to-run-with-single-click), generate meaningful barcodes
+including anonymized request id, block and stain, and check for common manual
+mistakes like cut-and-paste errors, and assemble the anonymized data in a folder
+ready for easy import into a Picture Archice and Communication System (PACS).
 
-This tools helps reduce monotonous, repetitive and error-prone manual work, letting
-the user carry out anonymization and linking by saving original image files in a given
-location and noting down study parameters in an Excel spreadsheet. It is possible
-to set up this tool to [run with a single click](#setup-to-run-with-single-click),
-anonymizing data, assigning anonymous identifiers, detecting common manual errors,
-assembling information and making ready for anonymous import.
+**Note: Research software not approved for clinical use.**
 
 ## Requirements
 
