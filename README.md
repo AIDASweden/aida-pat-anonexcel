@@ -6,11 +6,11 @@ anonymous barcodes including information on request, block and stain.
 **Research software not approved for clinical use.**
 
 This tools helps reduce monotonous, repetitive and error-prone manual work, letting
-the user work by saving images in the right place and noting study data in an Excel
-spreadsheet. This tool can then be set up to
-[run with a single click](#setup-to-run-with-single-click), anonymizing data, assigning
-anonymous identifiers, detecting common manual errors, assembling information and
-making ready for anonymous import.
+the user carry out anonymization and linking by saving original image files in a given
+location and noting down study parameters in an Excel spreadsheet. It is possible
+to set up this tool to [run with a single click](#setup-to-run-with-single-click),
+anonymizing data, assigning anonymous identifiers, detecting common manual errors,
+assembling information and making ready for anonymous import.
 
 ## Requirements
 
@@ -21,7 +21,7 @@ making ready for anonymous import.
 ## Usage
 `py aida-pat-anonexcel.py anonymization-sheet.xlsx`
 
-Make a copy of anonymization-sheet.xlsx and fill it out. Follow instructions in sheet.
+Make a copy of anonymization-sheet.xlsx and fill it out according to instruction in sheet.
 Person should be the name of (possibly uncompressed) case export zipfiles with
 BLOCK_STAIN subdirectories. Running the above command puts anonymized images for
 export in subdirectory `anonymization-sheet_anon/` and updates
@@ -51,9 +51,9 @@ anonymization-sheet.xlsx (after):
 | Done | P456456456 | 789.svs | P-005 |  | HE3 | Y | 5 | low |
 
 ### Setup to run with single click
-You can set up a shortcut to run aida-pat-anonexcel.py on a specific AIDA anonymization
-sheet, or to run it on any sheet that you drag-and-drop onto the Shortcut. Both these
-methods will open a terminal window for status and error messages, which you can close
+You can set up a shortcut to run aida-pat-anonexcel.py either on a specific AIDA anonymization
+sheet, or on any sheet that you drag-and-drop onto the shortcut. Both these
+methods will open a terminal window for status and error messages which you can close
 when you have finished reading.
 
 1. Install dependencies (Python3 and openpyxl).
