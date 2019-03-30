@@ -6,10 +6,10 @@ exports case by case in a folder, and noting them down along with associated
 study parameters in an Excel spreadsheet.
 
 From there, this tool can anonymize the slides
-[with a single click](#setup-to-run-with-single-click), generate meaningful barcodes
-including anonymized request id, block and stain, and check for common manual
-mistakes like cut-and-paste errors, and assemble the anonymized data in a folder
-ready for easy import into a Picture Archice and Communication System (PACS).
+[with a single click](#setup-to-run-with-single-click), and check for common
+manual errors, mark data red that needs deleting to complete anonymization, and
+assemble the anonymized data in a folder ready for easy import into a Picture 
+Archice and Communication System (PACS).
 
 **Note: Research software not approved for clinical use.**
 
@@ -18,6 +18,9 @@ ready for easy import into a Picture Archice and Communication System (PACS).
 * anonymize_wsi
 * Python3 with packages:
   * openpyxl
+
+anonymize_wsi is expected to anonymize a single WSI when invoked with:
+`anonymize_wsi -o ANONDIR -bv BARCODE FILE`
 
 ## Usage
 `py aida-pat-anonexcel.py anonymization-sheet.xlsx`
@@ -47,9 +50,9 @@ anonymization-sheet.xlsx (after):
 | Done | P123123123 | 234.svs | P-004 | B | HE | X | 1 | high |
 | Done | P123123123 | 345.svs | P-004 | C | HE | X | 1 | high |
 | Done | P123123123 | 456.svs | P-004 | D | HE | X | 1 | high |
-| Done | P456456456 | 567.svs | P-005 |  | HE | Y | 5 | low |
-| Done | P456456456 | 678.svs | P-005 |  | HE2 | Y | 5 | low |
-| Done | P456456456 | 789.svs | P-005 |  | HE3 | Y | 5 | low |
+| Done | P456456456 | 567.ndpi | P-005 | A | HE | Y | 5 | low |
+| Done | P456456456 | 678.ndpi | P-005 | A | HE2 | Y | 5 | low |
+| Done | P456456456 | 789.ndpi | P-005 | A | HE3 | Y | 5 | low |
 
 ### Setup to run with single click
 You can set up a shortcut to run aida-pat-anonexcel.py either on a specific AIDA anonymization
