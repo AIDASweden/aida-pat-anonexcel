@@ -13,6 +13,7 @@ __doc__ %= __version__
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -51,14 +52,12 @@ slidefiletypes = ['.svs', '.ndpi']
 
 tests = dict(
     D1="AIDA Pathology Anonymization Sheet",
-    D9="Prefix:",
-    D10="Digits:",
-    A14="Status",
-    B14="Person",
-    C14="OrigFile",
-    D14="AnonID",
-    E14="Block",
-    F14="Stain",
+    A9="Status",
+    B9="Person",
+    C9="OrigFile",
+    D9="AnonID",
+    E9="Block",
+    F9="Stain",
 )
 def check_worksheet(ws):
     for cell, value in tests.items():
@@ -73,7 +72,7 @@ class ParseError(ValueError):
 def err(row, msg, *args, **kw):
     raise ParseError(row, msg.format(*args, **kw))
 
-def get_anonid_number(row, anonid, prefix, digits, previous):
+def validate_anonid_number(row, anonid, prefix, digits, previous):
     try:
         anonid_number = int(anonid[len(prefix):])
     except:
@@ -85,19 +84,12 @@ def get_anonid_number(row, anonid, prefix, digits, previous):
     if anonid_number < 0:
         err(row, "AnonID is {!r}, but must start with Prefix {!r} followed by a {}-digit number > 0.",
             anonid, prefix, digits)
-    if anonid_number <= previous:
-        err(row, "AnonID number is {!r}, but must be greater than the previous ({}).",
+    if anonid_number < previous:
+        err(row, "AnonID number is {!r}, but must not be less than the previous ({}).",
             anonid_number, previous)
     return anonid_number
 
-def make_anonid(personid, anonids, prefix, digits, anonid_number):
-    anonid = anonids.get(personid)
-    if not anonid:
-        anonid_number += 1
-        anonid = prefix + str(anonid_number).zfill(digits)
-    return anonid, anonid_number
-
-def verify_id_mapping(row, personid, anonid, personids, anonids):
+def validate_id_mapping(row, personid, anonid, personids, anonids):
     existing_personid = personids.setdefault(anonid, personid)
     if existing_personid and existing_personid != personid:
         err(row, "Person {} is given AnonID {} on this row, but this AnonID was previously given to Person {}.",
@@ -178,36 +170,69 @@ def get_personid(person):
         return person[:-4]
     return person
 
-def anonymize(wb, basedir, tmpdir, anondir, excelfile):
-    ws = wb.active
-    check_worksheet(ws)
-    prefix = get_str(ws, 9, 5)
-    digits = ws["E10"].value or 3
-    barcodes = set()
+def validate_anonymization_data(worksheet):
     anonids = dict() # personid -> anonid
     personids = dict() # anonid -> personid
-
     personid_rows = dict() # personid -> rownumber
+    barcode_rows = dict() # barcode -> rownumber
     done = set()
-    for i in range(15, ws.max_row + 1):
-        status = get_str(ws, i, 1)
-        personid = get_personid(get_str(ws, i, 2))
+    prefix = None
+    digits = 0
+    anonid_number = 0
+    for i in range(10, worksheet.max_row + 1):
+        status = get_str(worksheet, i, 1)
+        personid = get_personid(os.path.basename(get_str(worksheet, i, 2)))
+        origfile = get_str(worksheet, i, 3)
+        anonid = get_str(worksheet, i, 4)
+        block = get_str(worksheet, i, 5)
+        stain = get_str(worksheet, i, 6)
+        if status:
+            if status.lower() == 'ignore':
+                continue
+            if status.lower() != "done":
+                err(i, "Unknown Status {!r}.", status)
+            if not (anonid and block and stain):
+                err(i, "AnonID/Block/Stain missing!")
+            barcode = get_barcode(anonid, block, stain)
+            if barcode in barcode_rows:
+                err(i, "Barcode {!r} same as on Row {} but bacodes must be unique.",
+                    barcode, barcode_rows[barcode])
+            barcode_rows[barcode] = i
+        if not anonid:
+            err(i, "No AnonID given.")
+        if prefix is None:
+            try:
+                digits = len(re.search(r'\d+$', anonid)[0])
+            except:
+                err(i, "AnonID {!r} must end with a zero padded number, such as '001'.",
+                    anonid)
+            prefix = anonid[:-digits]
+        anonid_number = validate_anonid_number(i, anonid, prefix, digits, anonid_number)
         if personid:
+            validate_id_mapping(i, personid, anonid, personids, anonids)
             if personid in personid_rows and not (status.lower() == 'done' and personid in done):
-                err(i, "Persons must be unique, but ID {!r} occurs multiple times; here and also on row {}.",
+                err(i, "Persons must be unique before anonymizing, but ID {!r} occurs multiple times; here and also on row {}.",
                     personid, personid_rows[personid])
             if status.lower() == 'done':
                 done.add(personid)
+            elif origfile or block or stain:
+                err(i, "Garbage in OrigFile/Block/Stain columns; OrigFile, Block and Stain must be given by subfolders to Person.")
             personid_rows[personid] = i
+        elif status.lower() != "done":
+            err(i, "No Person specified.")
 
-    # Skip headers
-    i = 15
-    anonid_number = 0
-    person = None
+def anonymize(wb, basedir, tmpdir, anondir, excelfile):
+    barcodes = set()
+    ws = wb.active
+    check_worksheet(ws)
+    validate_anonymization_data(ws)
+
+    i = 10
     while i <= ws.max_row:
         # Status	Person	OrigFile	AnonID	Block	Stain
         status = get_str(ws, i, 1)
-        person = get_str(ws, i, 2) or person
+        person = os.path.basename(get_str(ws, i, 2))
+        personid = get_personid(person)
         origfile = get_str(ws, i, 3)
         anonid = get_str(ws, i, 4)
         block = get_str(ws, i, 5)
@@ -215,33 +240,18 @@ def anonymize(wb, basedir, tmpdir, anondir, excelfile):
 
         if status:
             if status.lower() == "done":
-                if not (anonid and block and stain):
-                    err(i, "AnonID/Block/Stain missing!")
                 mark_done(ws, i, person, origfile)
                 wb.save(excelfile)
-            elif status.lower() != "ignore":
-                err(i, "Unknown Status {!r}.", status)
+                barcodes.add(get_barcode(anonid, block, stain))
             i += 1
             continue
 
-        person = os.path.basename(person)
-        if not person:
-            err(i, "No Person specified.")
         personfile = os.path.join(basedir, person)
         if not os.path.exists(personfile):
-            err(i, "Person {!r} does not exist in work directory {}.", person, basedir)
+            print("Terminating at Row {}: Person {!r} does not exist in work directory {}.".format(
+                i, person, basedir))
+            return barcodes
         is_zip = person.endswith('.zip')
-
-        # Validate IDs, mappings etc.
-        personid = get_personid(person)
-        if anonid:
-            anonid_number = get_anonid_number(i, anonid, prefix, digits, anonid_number)
-        else:
-            anonid, anonid_number = make_anonid(personid, anonids, prefix, digits, anonid_number)
-        verify_id_mapping(i, personid, anonid, personids, anonids)
-
-        if origfile or block or stain:
-            err(i, "Garbage in OrigFile/Block/Stain columns; OrigFile, Block and Stain must be given by subfolders to Person.")
 
         persondir = personfile
         if is_zip:
@@ -299,8 +309,8 @@ def main(argv):
     if garbage:
         print("\nWarning: Possible garbage files found in {!r} folder. You may want to delete these before proceding:".format(options.anondir), file=sys.stderr)
         print("\n".join(repr(s) for s in garbage), file=sys.stderr)
-    print("\nDone! {} anonymized images added to {!r}. {!r} has been updated.".format(
-            len(barcodes), os.path.basename(options.anondir), os.path.basename(options.excelfile.name)))
+    print("\nDone! Anonymized images in {!r} folder. {!r} has been updated.".format(
+            os.path.basename(options.anondir), os.path.basename(options.excelfile.name)))
     print("\nYour data is now Pseudonymous.\n")
     print("To make your data Anonymous: Delete all keys associating AnonIDs to "
           "Persons, including the Person and OrigFile file cells in {0!r}. "

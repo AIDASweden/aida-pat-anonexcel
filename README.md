@@ -8,7 +8,7 @@ study parameters in an Excel spreadsheet.
 From there, this tool can anonymize the slides
 [with a single click](#setup-to-run-with-single-click), and check for common
 manual errors, mark data red that needs deleting to complete anonymization, and
-assemble the anonymized data in a folder ready for easy import into a Picture 
+assemble the anonymized data in a folder ready for easy import into a Picture
 Archice and Communication System (PACS).
 
 **Note: Research software not approved for clinical use.**
@@ -23,15 +23,15 @@ anonymize_wsi is expected to anonymize a single WSI when invoked with:
 `anonymize_wsi -o ANONDIR -bv BARCODE FILE`
 
 ## Usage
-`py aida-pat-anonexcel.py anonymization-sheet.xlsx`
+`py aida-pat-anonexcel.py myproj.xlsx`
 
 Make a copy of anonymization-sheet.xlsx and fill it out according to instruction in sheet.
 Person should be the name of (possibly uncompressed) case export zipfiles with
 BLOCK_STAIN subdirectories. Running the above command puts anonymized images for
-export in subdirectory `anonymization-sheet_anon/` and updates
-`anonymization-sheet_anon.xlsx` to match, with block and stain information on new
-rows for each anonymized slide, and with study parameters carried over for each
-case and adding red highlight to cells that need be deleted to complete anonymization.
+export in subdirectory myproj_anon/ and updates myproj.xlsx to match with
+block and stain information on new rows for each anonymized slide, and with
+study parameters carried over for each case and adding red highlight to cells
+that need be deleted to complete anonymization.
 
 ### Example
 
@@ -40,7 +40,7 @@ anonymization-sheet.xlsx (before):
 | Status | Person | OrigFile | AnonID | Block | Stain | Study parameter 1 | 2 | … |
 | --- | --- | --- | --- | --- | --- |  --- | --- | --- |
 | |P123123123| | P-004 |  |  | X | 1 | high |
-| |P456456456| | |  |  | Y | 5 | low |
+| |P456456456| | P-005 |  |  | Y | 5 | low |
 
 anonymization-sheet.xlsx (after):
 
