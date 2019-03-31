@@ -170,6 +170,15 @@ def get_personid(person):
         return person[:-4]
     return person
 
+def parse_anonid(i, anonid):
+    try:
+        digits = len(re.search(r'\d+$', anonid)[0])
+    except:
+        err(i, "AnonID {!r} must end with a zero padded number, such as '001'.",
+            anonid)
+    prefix = anonid[:-digits]
+    return prefix, digits
+
 def validate_anonymization_data(worksheet):
     anonids = dict() # personid -> anonid
     personids = dict() # anonid -> personid
@@ -201,12 +210,7 @@ def validate_anonymization_data(worksheet):
         if not anonid:
             err(i, "No AnonID given.")
         if prefix is None:
-            try:
-                digits = len(re.search(r'\d+$', anonid)[0])
-            except:
-                err(i, "AnonID {!r} must end with a zero padded number, such as '001'.",
-                    anonid)
-            prefix = anonid[:-digits]
+            prefix, digits = parse_anonid(i, anonid)
         anonid_number = validate_anonid_number(i, anonid, prefix, digits, anonid_number)
         if personid:
             validate_id_mapping(i, personid, anonid, personids, anonids)
@@ -220,12 +224,12 @@ def validate_anonymization_data(worksheet):
             personid_rows[personid] = i
         elif status.lower() != "done":
             err(i, "No Person specified.")
+    return set(barcode_rows.keys())
 
 def anonymize(wb, basedir, tmpdir, anondir, excelfile):
-    barcodes = set()
     ws = wb.active
     check_worksheet(ws)
-    validate_anonymization_data(ws)
+    barcodes = validate_anonymization_data(ws)
 
     i = 10
     while i <= ws.max_row:
@@ -242,7 +246,6 @@ def anonymize(wb, basedir, tmpdir, anondir, excelfile):
             if status.lower() == "done":
                 mark_done(ws, i, person, origfile)
                 wb.save(excelfile)
-                barcodes.add(get_barcode(anonid, block, stain))
             i += 1
             continue
 
