@@ -52,12 +52,12 @@ slidefiletypes = ['.svs', '.ndpi']
 
 tests = dict(
     D1="AIDA Pathology Anonymization Sheet",
-    A9="Status",
-    B9="Person",
-    C9="OrigFile",
-    D9="AnonID",
-    E9="Block",
-    F9="Stain",
+    A12="Status",
+    B12="Case",
+    C12="OrigFile",
+    D12="AnonID",
+    E12="Block",
+    F12="Stain",
 )
 def check_worksheet(ws):
     for cell, value in tests.items():
@@ -89,15 +89,15 @@ def validate_anonid_number(row, anonid, prefix, digits, previous):
             anonid_number, previous)
     return anonid_number
 
-def validate_id_mapping(row, personid, anonid, personids, anonids):
-    existing_personid = personids.setdefault(anonid, personid)
-    if existing_personid and existing_personid != personid:
-        err(row, "Person {} is given AnonID {} on this row, but this AnonID was previously given to Person {}.",
-            personid, anonid, existing_personid)
-    existing_anonid = anonids.setdefault(personid, anonid)
+def validate_id_mapping(row, caseid, anonid, caseids, anonids):
+    existing_caseid = caseids.setdefault(anonid, caseid)
+    if existing_caseid and existing_caseid != caseid:
+        err(row, "Case {} is given AnonID {} on this row, but this AnonID was previously given to Case {}.",
+            caseid, anonid, existing_caseid)
+    existing_anonid = anonids.setdefault(caseid, anonid)
     if existing_anonid and existing_anonid != anonid:
-        err(row, "Person {} is given AnonID {} on this row, but this Person was previously given AnonID {}.",
-            personid, anonid, existing_anonid)
+        err(row, "Case {} is given AnonID {} on this row, but this Case was previously given AnonID {}.",
+            caseid, anonid, existing_anonid)
 
 def get_barcode(anonid, block, stain):
     return "{0};{0};{1};{2}".format(anonid, block, stain)
@@ -110,19 +110,19 @@ def files(directory, *ext):
 def subdirs(directory):
     return next(os.walk(directory))[1]
 
-def get_slides(i, persondir):
+def get_slides(i, casedir):
     slides = []
-    for slidedir in subdirs(persondir):
+    for slidedir in subdirs(casedir):
         if '_' not in slidedir:
-            err(i, "Slide directory {!r} for Person {!r} is not named on the format BLOCK_STAIN (eg 'A_HE').",
-                slidedir, os.path.basename(persondir))
+            err(i, "Slide directory {!r} for Case {!r} is not named on the format BLOCK_STAIN (eg 'A_HE').",
+                slidedir, os.path.basename(casedir))
         block, stain = slidedir.split('_')
-        slidefiles = files(os.path.join(persondir, slidedir), *slidefiletypes)
+        slidefiles = files(os.path.join(casedir, slidedir), *slidefiletypes)
         if len(slidefiles) != 1:
-            err(i, "Expected 1 slide file in slide directory {!r} for Person {!r} but found {}{}.",
-                slidedir, os.path.basename(persondir), len(slidefiles),
+            err(i, "Expected 1 slide file in slide directory {!r} for Case {!r} but found {}{}.",
+                slidedir, os.path.basename(casedir), len(slidefiles),
                 ' ({})'.format(', '.join(repr(f) for f in slidefiles) if slidefiles else ''))
-        origfile = os.path.join(persondir, slidedir, slidefiles[0])
+        origfile = os.path.join(casedir, slidedir, slidefiles[0])
         slides.append((block, stain, origfile))
     return slides
 
@@ -141,18 +141,18 @@ def mark_red(cell):
 def mark_ok(cell):
     cell.style = 'Normal'
 
-def mark_done(worksheet, row, person, origfile):
+def mark_done(worksheet, row, case, origfile):
     p = worksheet.cell(row, 2)
     o = worksheet.cell(row, 3)
-    mark_red(p) if person else mark_ok(p)
+    mark_red(p) if case else mark_ok(p)
     mark_red(o) if origfile else mark_ok(o)
 
-def update_spreadsheet(i, ws, person, origfile, anonid, slides):
+def update_spreadsheet(i, ws, case, origfile, anonid, slides):
     ws.insert_rows(i+1, len(slides) - 1)
     for slideindex, (block, stain, origfile) in enumerate(slides):
         barcode = get_barcode(anonid, block, stain)
         ws.cell(i + slideindex, 1, 'Done')
-        ws.cell(i + slideindex, 2, person)
+        ws.cell(i + slideindex, 2, case)
         ws.cell(i + slideindex, 3, origfile)
         ws.cell(i + slideindex, 4, anonid)
         ws.cell(i + slideindex, 5, block)
@@ -160,15 +160,15 @@ def update_spreadsheet(i, ws, person, origfile, anonid, slides):
         if slideindex > 0:
             for c in range(7, ws.max_column):
                 ws.cell(i + slideindex, c, ws.cell(i, c).value)
-        mark_done(ws, i + slideindex, person, origfile)
+        mark_done(ws, i + slideindex, case, origfile)
 
 def get_str(worksheet, row, column):
     return str(worksheet.cell(row, column).value or '').strip()
 
-def get_personid(person):
-    if person.endswith('.zip'):
-        return person[:-4]
-    return person
+def get_caseid(case):
+    if case.endswith('.zip'):
+        return case[:-4]
+    return case
 
 def parse_anonid(i, anonid):
     try:
@@ -180,17 +180,17 @@ def parse_anonid(i, anonid):
     return prefix, digits
 
 def validate_anonymization_data(worksheet):
-    anonids = dict() # personid -> anonid
-    personids = dict() # anonid -> personid
-    personid_rows = dict() # personid -> rownumber
+    anonids = dict() # caseid -> anonid
+    caseids = dict() # anonid -> caseid
+    caseid_rows = dict() # caseid -> rownumber
     barcode_rows = dict() # barcode -> rownumber
     done = set()
     prefix = None
     digits = 0
     anonid_number = 0
-    for i in range(10, worksheet.max_row + 1):
+    for i in range(13, worksheet.max_row + 1):
         status = get_str(worksheet, i, 1)
-        personid = get_personid(os.path.basename(get_str(worksheet, i, 2)))
+        caseid = get_caseid(os.path.basename(get_str(worksheet, i, 2)))
         origfile = get_str(worksheet, i, 3)
         anonid = get_str(worksheet, i, 4)
         block = get_str(worksheet, i, 5)
@@ -212,18 +212,18 @@ def validate_anonymization_data(worksheet):
         if prefix is None:
             prefix, digits = parse_anonid(i, anonid)
         anonid_number = validate_anonid_number(i, anonid, prefix, digits, anonid_number)
-        if personid:
-            validate_id_mapping(i, personid, anonid, personids, anonids)
-            if personid in personid_rows and not (status.lower() == 'done' and personid in done):
-                err(i, "Persons must be unique before anonymizing, but ID {!r} occurs multiple times; here and also on row {}.",
-                    personid, personid_rows[personid])
+        if caseid:
+            validate_id_mapping(i, caseid, anonid, caseids, anonids)
+            if caseid in caseid_rows and not (status.lower() == 'done' and caseid in done):
+                err(i, "Cases must be unique before anonymizing, but ID {!r} occurs multiple times; here and also on row {}.",
+                    caseid, caseid_rows[caseid])
             if status.lower() == 'done':
-                done.add(personid)
+                done.add(caseid)
             elif origfile or block or stain:
-                err(i, "Garbage in OrigFile/Block/Stain columns; OrigFile, Block and Stain must be given by subfolders to Person.")
-            personid_rows[personid] = i
+                err(i, "Garbage in OrigFile/Block/Stain columns; OrigFile, Block and Stain must be given by subfolders to Case.")
+            caseid_rows[caseid] = i
         elif status.lower() != "done":
-            err(i, "No Person specified.")
+            err(i, "No Case specified.")
     return set(barcode_rows.keys())
 
 def anonymize(wb, basedir, tmpdir, anondir, excelfile):
@@ -231,12 +231,13 @@ def anonymize(wb, basedir, tmpdir, anondir, excelfile):
     check_worksheet(ws)
     barcodes = validate_anonymization_data(ws)
 
-    i = 10
+    i = 13
     while i <= ws.max_row:
-        # Status	Person	OrigFile	AnonID	Block	Stain
+        # Status	Case	OrigFile	AnonID	Block	Stain
         status = get_str(ws, i, 1)
-        person = os.path.basename(get_str(ws, i, 2))
-        personid = get_personid(person)
+        case = os.path.basename(get_str(ws, i, 2))
+        caseid = get_caseid(case)
+        is_zip = case.endswith('.zip')
         origfile = get_str(ws, i, 3)
         anonid = get_str(ws, i, 4)
         block = get_str(ws, i, 5)
@@ -244,38 +245,37 @@ def anonymize(wb, basedir, tmpdir, anondir, excelfile):
 
         if status:
             if status.lower() == "done":
-                mark_done(ws, i, person, origfile)
+                mark_done(ws, i, case, origfile)
                 wb.save(excelfile)
             i += 1
             continue
 
-        personfile = os.path.join(basedir, person)
-        if not os.path.exists(personfile):
-            print("Terminating at Row {}: Person {!r} does not exist in work directory {}.".format(
-                i, person, basedir))
+        casefile = os.path.join(basedir, case)
+        if not os.path.exists(casefile):
+            print("Terminating at Row {}: Case {!r} does not exist in work directory {}.".format(
+                i, case, basedir))
             return barcodes
-        is_zip = person.endswith('.zip')
 
-        persondir = personfile
+        casedir = casefile
         if is_zip:
-            persondir = os.path.join(tmpdir, personid)
-            print("Decompressing {}...".format(person))
-            zipfile.ZipFile(personfile).extractall(tmpdir)
+            casedir = os.path.join(tmpdir, caseid)
+            print("Decompressing {}...".format(case))
+            zipfile.ZipFile(casefile).extractall(tmpdir)
 
-        slides = get_slides(i, persondir)
+        slides = get_slides(i, casedir)
         if not slides:
-            err(i, "No slides present for Person {!r}.", person)
+            err(i, "No slides present for Case {!r}.", case)
         for block, stain, origfile in slides:
             barcode = get_barcode(anonid, block, stain)
             anonymize_slide(i, origfile, anondir, barcode)
             barcodes.add(barcode)
 
-        update_spreadsheet(i, ws, person, origfile, anonid, slides)
+        update_spreadsheet(i, ws, case, origfile, anonid, slides)
         wb.save(excelfile)
         i += len(slides)
 
         if is_zip:
-            shutil.rmtree(persondir)
+            shutil.rmtree(casedir)
 
     return barcodes
 
@@ -316,7 +316,7 @@ def main(argv):
             os.path.basename(options.anondir), os.path.basename(options.excelfile.name)))
     print("\nYour data is now Pseudonymous.\n")
     print("To make your data Anonymous: Delete all keys associating AnonIDs to "
-          "Persons, including the Person and OrigFile file cells in {0!r}. "
+          "Cases, including the Case and OrigFile file cells in {0!r}. "
           "Obviously, none of the study parameters in {0!r} may contain "
           "identifiers either.".format(os.path.basename(options.excelfile.name)))
 
