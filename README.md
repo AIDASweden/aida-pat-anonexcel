@@ -37,14 +37,14 @@ that need be deleted to complete anonymization.
 
 anonymization-sheet.xlsx (before):
 
-| Status | Person | OrigFile | AnonID | Block | Stain | Study parameter 1 | 2 | … |
+| Status | Case | OrigFile | AnonID | Block | Stain | Study parameter 1 | 2 | … |
 | --- | --- | --- | --- | --- | --- |  --- | --- | --- |
 | |P123123123| | P-004 |  |  | X | 1 | high |
 | |P456456456| | P-005 |  |  | Y | 5 | low |
 
 anonymization-sheet.xlsx (after):
 
-| Status | Person | OrigFile | AnonID | Block | Stain | Study parameter 1 | 2 | … |
+| Status | Case | OrigFile | AnonID | Block | Stain | Study parameter 1 | 2 | … |
 | --- | --- | --- | --- |  --- | --- | --- | --- | --- |
 | Done | P123123123 | 123.svs | P-004 | A | HE | X | 1 | high |
 | Done | P123123123 | 234.svs | P-004 | B | HE | X | 1 | high |
@@ -62,7 +62,7 @@ when you have finished reading.
 
 1. Install dependencies (Python3 and openpyxl).
 2. Put aida-pat-anonexcel.py somewhere permanent where you can find it.
-3. Put your copy of the anonymization sheet in a folder where you want to work. Name it myproj.xlsx or similar. Put images in (subfolders to) this folder.
+3. Put your copy of the anonymization sheet in a folder where you want to work. Name it myproj.xlsx or similar. Put exported cases as zipfiles/subfolders in this folder.
 4. Make a shortcut some place convenient, eg in your work folder or elsewhere.
 
 Make a shortcut:
